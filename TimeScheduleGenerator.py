@@ -4,9 +4,6 @@ import plotly.graph_objects as go
 import re
 from collections import defaultdict
 
-# Replace this with your OneDrive direct download link
-EXCEL_PATH = "https://quattrongmbh.sharepoint.com/sites/GB1-ProjekteIL/_layouts/15/download.aspx?SourceUrl=https://quattrongmbh.sharepoint.com/sites/GB1-ProjekteIL/Freigegebene%20Dokumente/226-141_Increase_to_13tph/Bearbeitung/Rostering/TrainScheduleApp/Tankenliste.xlsm?d=we952f7a148d04a348509142b04ffc1a3"
-
 SHEET_LAUF = "Laufwege"
 SHEET_VERKN = "IN_Verknüpfungen"
 SHEET_ZUG = "IN_Zugliste"
@@ -21,7 +18,7 @@ def parse_duration(val):
         return pd.Timedelta(0)
     try:
         return pd.to_timedelta(str(val))
-    except:
+    except Exception:
         return pd.Timedelta(0)
 
 def extract_number(s):
@@ -35,26 +32,37 @@ _station_re = re.compile(r'^[A-Z]{2,}$')
 def extract_stations(train_name):
     parts = str(train_name).split("_")
     stations = [p for p in parts if _station_re.match(p)]
-    if len(stations) >= 2: return stations[0], stations[-1]
-    if len(stations) == 1: return stations[0], stations[0]
+    if len(stations) >= 2:
+        return stations[0], stations[-1]
+    if len(stations) == 1:
+        return stations[0], stations[0]
     fallback = [re.sub(r'[^A-Z]', '', p).strip() for p in parts if re.search(r'[A-Z]', p)]
     fallback = [p for p in fallback if len(p) >= 2]
-    if len(fallback) >= 2: return fallback[0], fallback[-1]
-    if len(fallback) == 1: return fallback[0], fallback[0]
+    if len(fallback) >= 2:
+        return fallback[0], fallback[-1]
+    if len(fallback) == 1:
+        return fallback[0], fallback[0]
     return "", ""
 
 def color_for_zugklasse(z):
-    if not z: return "#7f7f7f"
+    if not z:
+        return "#7f7f7f"
     z = str(z).strip()
-    if z == "NRz": return "#2171b5"
-    if z == "Lz": return "#238b45"
+    if z == "NRz":
+        return "#2171b5"
+    if z == "Lz":
+        return "#238b45"
     return "#525252"
 
-def generate_schedule_html():
-    """Generates the Gantt chart and composition list as an HTML string"""
-    lauf = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_LAUF, header=START_ROW, engine="openpyxl")
-    verkn = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_VERKN, header=2, engine="openpyxl")
-    zugliste = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_ZUG, header=0, engine="openpyxl")
+def generate_schedule_html(excel_file):
+    """
+    Accepts a file path or a file-like object (like uploaded Excel from Streamlit),
+    and returns the HTML string for the schedule.
+    """
+    # Read Excel sheets
+    lauf = pd.read_excel(excel_file, sheet_name=SHEET_LAUF, header=START_ROW, engine="openpyxl")
+    verkn = pd.read_excel(excel_file, sheet_name=SHEET_VERKN, header=2, engine="openpyxl")
+    zugliste = pd.read_excel(excel_file, sheet_name=SHEET_ZUG, header=0, engine="openpyxl")
 
     verkn.columns = [clean_column_name(c) for c in verkn.columns]
     zugliste.columns = [clean_column_name(c) for c in zugliste.columns]
@@ -80,7 +88,7 @@ def generate_schedule_html():
     )
 
     composition_distances = {
-        str(r.iloc[COL_FAHRTNAME]).strip(): int(round(float(r.iloc[COL_DISTANCE])/1000.0, 0))
+        str(r.iloc[COL_FAHRTNAME]).strip(): int(round(float(r.iloc[COL_DISTANCE]) / 1000.0, 0))
         if pd.notna(r.iloc[COL_DISTANCE]) else 0
         for _, r in lauf.iterrows() if str(r.iloc[COL_FAHRTNAME]).strip()
     }
@@ -90,14 +98,17 @@ def generate_schedule_html():
 
     for _, r in lauf.iterrows():
         comp = str(r.iloc[COL_FAHRTNAME]).strip()
-        if not comp: continue
+        if not comp:
+            continue
         start_time = r.iloc[COL_START]
-        if pd.isna(start_time): continue
+        if pd.isna(start_time):
+            continue
 
         t_cursor = start_time
         for i, col_idx in enumerate(all_cols_after_G):
             dur = parse_duration(r.iloc[col_idx])
-            if dur <= pd.Timedelta(0): continue
+            if dur <= pd.Timedelta(0):
+                continue
             if i % 2 == 0:
                 seg_start = t_cursor
                 seg_end = t_cursor + dur
@@ -106,15 +117,20 @@ def generate_schedule_html():
                 station_left, station_right = extract_stations(train_name)
                 zugklasse = zugklasse_map.get(train_name, "")
                 balken.append({
-                    "Start": seg_start, "Ende": seg_end, "Y": comp,
-                    "Train": train_name, "StationLeft": station_left,
-                    "StationRight": station_right, "Nummer": trip_number,
+                    "Start": seg_start,
+                    "Ende": seg_end,
+                    "Y": comp,
+                    "Train": train_name,
+                    "StationLeft": station_left,
+                    "StationRight": station_right,
+                    "Nummer": trip_number,
                     "Zugklasse": zugklasse
                 })
                 t_cursor = seg_end
             else:
                 t_cursor += dur
 
+    # Build figure
     unique_comps = sorted(list({b["Y"] for b in balken}), key=extract_number)
     y_axis_labels = [f"{comp} ({composition_distances.get(comp,0)} km)" for comp in unique_comps]
     comp_to_label = {comp: lbl for comp, lbl in zip(unique_comps, y_axis_labels)}
@@ -130,36 +146,36 @@ def generate_schedule_html():
         bars_by_color[color]["y"].extend([comp_label, comp_label, None])
         bars_by_color[color]["text"].extend([b["Train"], b["Train"], None])
 
-        if b["StationLeft"]:
-            annotations.append(dict(
-                x=b["Start"] + pd.to_timedelta('00:00:30'),
-                y=comp_label,
-                text=b["StationLeft"],
-                showarrow=False,
-                font=dict(size=8, color="white"),
-                xanchor="left",
-                yanchor="middle"
-            ))
-        if b["StationRight"]:
-            annotations.append(dict(
-                x=b["Ende"] - pd.to_timedelta('00:00:30'),
-                y=comp_label,
-                text=b["StationRight"],
-                showarrow=False,
-                font=dict(size=8, color="white"),
-                xanchor="right",
-                yanchor="middle"
-            ))
+if b["StationLeft"]:
+    annotations.append(dict(
+        x=b["Start"] + pd.to_timedelta('00:00:30'),
+        y=comp_label,
+        text=b["StationLeft"],
+        showarrow=False,
+        font=dict(size=8, color="white"),
+        xanchor="left",
+        yanchor="middle"
+    ))
+if b["StationRight"]:
+    annotations.append(dict(
+        x=b["Ende"] - pd.to_timedelta('00:00:30'),  # fixed quote here
+        y=comp_label,
+        text=b["StationRight"],
+        showarrow=False,
+        font=dict(size=8, color="white"),
+        xanchor="right",
+        yanchor="middle"
+    ))
 
-        mid = b["Start"] + (b["Ende"] - b["Start"]) / 2
-        annotations.append(dict(
-            x=mid,
-            y=comp_label,
-            text=b["Train"],
-            showarrow=False,
-            font=dict(size=9, color="navy"),
-            yshift=12
-        ))
+    mid = b["Start"] + (b["Ende"] - b["Start"]) / 2
+    annotations.append(dict(
+    x=mid,
+    y=comp_label,
+    text=b["Train"],
+    showarrow=False,
+    font=dict(size=9, color="navy"),
+    yshift=12
+    ))
 
     fig = go.Figure()
     for color, segs in bars_by_color.items():
@@ -188,16 +204,18 @@ def generate_schedule_html():
     )
     fig.update_xaxes(tickformat="%H:%M:%S", showgrid=True, gridwidth=1, gridcolor="lightgray")
 
+    # Composition list
     composition_lists = {}
+    NAME_COL = "Erste Zugfahrt"
+    COMP_COL = "Fzg_Index"
+    NUMBER_COL = "n-te Fahrt"
     for comp, num, nm in zip(verkn[COMP_COL], verkn[NUMBER_COL], verkn[NAME_COL]):
         composition_lists.setdefault(str(comp).strip(), []).append((int(num), str(nm).strip()))
     for comp in composition_lists:
         composition_lists[comp] = [name for _, name in sorted(composition_lists[comp], key=lambda x: x[0])]
 
-    # generate HTML with colored1 at the end
-    html_filename = "time_schedule_gantt_colored1.html"
-    fig.write_html(html_filename, include_plotlyjs='cdn', full_html=True)
-
+    # Generate HTML in memory
+    html_str = fig.to_html(include_plotlyjs='cdn', full_html=True)
     composition_html = '<h2 style="font-size:20px;"><b>Trains in the Compositions</b></h2>\n'
     for comp in sorted(composition_lists.keys(), key=extract_number):
         dist_km = composition_distances.get(comp, 0)
@@ -205,9 +223,8 @@ def generate_schedule_html():
         composition_html += " -> ".join(composition_lists[comp])
         composition_html += "<br>\n"
 
-    with open(html_filename, "a", encoding="utf-8") as f:
-        f.write(composition_html)
+    html_str += composition_html
+    return html_str
 
-    return html_filename
 
 
