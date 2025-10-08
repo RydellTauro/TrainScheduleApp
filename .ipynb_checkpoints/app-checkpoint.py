@@ -1,23 +1,21 @@
+# app.py
 import streamlit as st
-import subprocess
-import os
+from TimeScheduleGenerator import generate_schedule_html
 
-st.title("Train Schedule App")
+st.title("Train Schedule Generator")
+
+st.write("Click the button to generate the train schedule from the latest Excel on OneDrive.")
 
 if st.button("Generate Schedule"):
-    # Run your TimeScheduleGenerator.py
-    result = subprocess.run(
-        ["python", "TimeScheduleGenerator.py"],
-        capture_output=True,
-        text=True
-    )
-    st.text("Output:")
-    st.text(result.stdout)
-    st.text(result.stderr)
-
-    # Display the HTML if generated
-    html_file = "time_schedule_gantt_colored1.html"
-    if os.path.exists(html_file):
-        with open(html_file, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        st.components.v1.html(html_content, height=800, scrolling=True)
+    try:
+        html_file = generate_schedule_html()
+        st.success("Schedule generated successfully!")
+        with open(html_file, "rb") as f:
+            st.download_button(
+                label="Download Schedule HTML",
+                data=f,
+                file_name=html_file,
+                mime="text/html"
+            )
+    except Exception as e:
+        st.error(f"Error generating schedule: {e}")
