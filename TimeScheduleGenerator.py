@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import re
 from collections import defaultdict
 
+EXCEL_PATH = "Tankenliste.xlsm"
 SHEET_LAUF = "Laufwege"
 SHEET_VERKN = "IN_Verknüpfungen"
 SHEET_ZUG = "IN_Zugliste"
@@ -52,16 +53,13 @@ def color_for_zugklasse(z):
         return "#2171b5"   
     if z == "Lz":
         return "#238b45"   
-    return "#525252"
+    return "#525252"       
 
-def generate_schedule_html(excel_file):
-    """
-    Generates the Gantt chart and composition list as an HTML string.
-    `excel_file` can be a Streamlit uploaded file or local path.
-    """
-    lauf = pd.read_excel(excel_file, sheet_name=SHEET_LAUF, header=START_ROW, engine="openpyxl")
-    verkn = pd.read_excel(excel_file, sheet_name=SHEET_VERKN, header=2, engine="openpyxl")
-    zugliste = pd.read_excel(excel_file, sheet_name=SHEET_ZUG, header=0, engine="openpyxl")
+def generate_schedule_html():
+    """Generates the Gantt chart and composition list as an HTML string"""
+    lauf = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_LAUF, header=START_ROW, engine="openpyxl")
+    verkn = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_VERKN, header=2, engine="openpyxl")
+    zugliste = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_ZUG, header=0, engine="openpyxl")
 
     verkn.columns = [clean_column_name(c) for c in verkn.columns]
     zugliste.columns = [clean_column_name(c) for c in zugliste.columns]
@@ -102,13 +100,12 @@ def generate_schedule_html(excel_file):
         start_time = r.iloc[COL_START]
         if pd.isna(start_time):
             continue
-
         t_cursor = start_time
         for i, col_idx in enumerate(all_cols_after_G):
             dur = parse_duration(r.iloc[col_idx])
             if dur <= pd.Timedelta(0):
                 continue
-            if i % 2 == 0:  
+            if i % 2 == 0:
                 seg_start = t_cursor
                 seg_end = t_cursor + dur
                 trip_number = 2 + i // 2
@@ -139,41 +136,38 @@ def generate_schedule_html(excel_file):
     for b in balken:
         comp_label = comp_to_label[b["Y"]]
         color = color_for_zugklasse(b["Zugklasse"])
-
         bars_by_color[color]["x"].extend([b["Start"], b["Ende"], None])
         bars_by_color[color]["y"].extend([comp_label, comp_label, None])
         bars_by_color[color]["text"].extend([b["Train"], b["Train"], None])
-
-if b["StationLeft"]:
-    annotations.append(dict(
-        x=b["Start"] + pd.to_timedelta('00:00:30'),
-        y=comp_label,
-        text=b["StationLeft"],
-        showarrow=False,
-        font=dict(size=8, color="white"),
-        xanchor="left",
-        yanchor="middle"
-    ))
-if b["StationRight"]:
-    annotations.append(dict(
-        x=b["Ende"] - pd.to_timedelta('00:00:30'),  # fixed quote here
-        y=comp_label,
-        text=b["StationRight"],
-        showarrow=False,
-        font=dict(size=8, color="white"),
-        xanchor="right",
-        yanchor="middle"
-    ))
-
-    mid = b["Start"] + (b["Ende"] - b["Start"]) / 2
-    annotations.append(dict(
-    x=mid,
-    y=comp_label,
-    text=b["Train"],
-    showarrow=False,
-    font=dict(size=9, color="navy"),
-    yshift=12
-    ))
+        if b["StationLeft"]:
+            annotations.append(dict(
+                x=b["Start"] + pd.to_timedelta('00:00:30'),
+                y=comp_label,
+                text=b["StationLeft"],
+                showarrow=False,
+                font=dict(size=8, color="white"),
+                xanchor="left",
+                yanchor="middle"
+            ))
+        if b["StationRight"]:
+            annotations.append(dict(
+                x=b["Ende"] - pd.to_timedelta('00:00:30'),
+                y=comp_label,
+                text=b["StationRight"],
+                showarrow=False,
+                font=dict(size=8, color="white"),
+                xanchor="right",
+                yanchor="middle"
+            ))
+        mid = b["Start"] + (b["Ende"] - b["Start"]) / 2
+        annotations.append(dict(
+            x=mid,
+            y=comp_label,
+            text=b["Train"],
+            showarrow=False,
+            font=dict(size=9, color="navy"),
+            yshift=12
+        ))
 
     fig = go.Figure()
     for color, segs in bars_by_color.items():
@@ -208,7 +202,7 @@ if b["StationRight"]:
     for comp in composition_lists:
         composition_lists[comp] = [name for _, name in sorted(composition_lists[comp], key=lambda x: x[0])]
 
-    # generate HTML in memory
+    # Generate HTML in memory
     html_str = fig.to_html(include_plotlyjs='cdn', full_html=True)
     composition_html = '<h2 style="font-size:20px;"><b>Trains in the Compositions</b></h2>\n'
     for comp in sorted(composition_lists.keys(), key=extract_number):
@@ -219,6 +213,7 @@ if b["StationRight"]:
 
     html_str += composition_html
     return html_str
+
 
 
 
