@@ -1,45 +1,48 @@
 # app.py
 import streamlit as st
 import TimeScheduleGenerator as tsg
+import io
 
 st.set_page_config(page_title="Train Schedule Generator", layout="wide")
 st.title("Train Schedule Generator")
 
-st.write(
-    """
-    Upload your Excel file and click 'Generate Schedule' to create the Gantt chart
-    and download the schedule HTML.
-    """
-)
+st.markdown("Upload your Excel file (`Tankenliste.xlsm`) to generate the schedule.")
 
-# Upload Excel file
-uploaded_file = st.file_uploader("Upload your Excel file (.xlsm)", type=["xlsm"])
+# File uploader
+uploaded_file = st.file_uploader("Choose Excel file", type=["xlsm"])
+if uploaded_file is not None:
+    # Save uploaded file temporarily
+    with open("Tankenliste.xlsm", "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    
+    st.success("File uploaded successfully!")
 
-if uploaded_file:
-    # Button to generate schedule
     if st.button("Generate Schedule"):
         try:
-            # Pass the uploaded file to the generator
-            html_content = tsg.generate_schedule_html(uploaded_file)
-
-            # Save the HTML file in the same folder
-            html_file = "time_schedule_gantt_colored1.html"
-            with open(html_file, "w", encoding="utf-8") as f:
+            # Generate HTML string
+            html_content = tsg.generate_schedule_html()
+            
+            # Save HTML file as time_schedule_gantt_colored1.html
+            html_file_name = "time_schedule_gantt_colored1.html"
+            with open(html_file_name, "w", encoding="utf-8") as f:
                 f.write(html_content)
-
-            # Display the HTML in Streamlit
+            
+            # Show HTML in Streamlit
             st.components.v1.html(html_content, height=800, scrolling=True)
-
-            # Provide a download button
-            with open(html_file, "rb") as f:
+            
+            # Provide download button
+            with open(html_file_name, "rb") as f:
                 st.download_button(
                     label="Download Schedule HTML",
                     data=f,
-                    file_name=html_file,
+                    file_name=html_file_name,
                     mime="text/html"
                 )
-
+            
             st.success("Schedule generated successfully!")
+
+        except Exception as e:
+            st.error(f"Error generating schedule: {e}")
 
         except Exception as e:
             st.error(f"Error generating schedule: {e}")
